@@ -1,13 +1,25 @@
-const { OpenAI } = require('openai');
-const { readConfig } = require('../core/config');
+
+import OpenAI from 'openai';
+import { readConfig } from '../core/config';
+import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { Tool } from '../core/tools';
+
+interface ChatCompletionOptions {
+  model: string;
+  tools?: Tool[];
+  tool_choice?: 'none' | 'auto' | { type: 'function'; function: { name: string } };
+}
 
 class OpenAIProvider {
-  constructor(providerName) {
+  private providerName: string;
+  private client: OpenAI;
+
+  constructor(providerName: string) {
     this.providerName = providerName;
     this.client = this._createClient();
   }
 
-  _createClient() {
+  private _createClient(): OpenAI {
     const config = readConfig();
     const aiProviders = config.ai_providers || {};
     const providerConfig = aiProviders[this.providerName];
@@ -16,8 +28,7 @@ class OpenAIProvider {
       throw new Error(`${this.providerName} API key not configured. Use 'dalton-cli configure ai set ${this.providerName} api_key <key>'`);
     }
 
-    // This handles standard OpenAI, Azure, and any other OpenAI-compatible API
-    const baseURL = providerConfig.api_endpoint; // This will be undefined for standard OpenAI, which is correct
+    const baseURL = providerConfig.api_endpoint;
 
     return new OpenAI({
       apiKey: providerConfig.api_key,
@@ -25,7 +36,7 @@ class OpenAIProvider {
     });
   }
 
-  async getChatCompletion(messages, options) {
+  public async getChatCompletion(messages: ChatCompletionMessageParam[], options: ChatCompletionOptions) {
     const { model, tools, tool_choice } = options;
 
     return await this.client.chat.completions.create({
@@ -38,4 +49,4 @@ class OpenAIProvider {
   }
 }
 
-module.exports = OpenAIProvider;
+export default OpenAIProvider;

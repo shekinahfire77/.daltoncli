@@ -1,5 +1,6 @@
 const inquirer = require('inquirer');
 const chalk = require('chalk');
+const os = require('os');
 const { getAvailableModels } = require('../core/model_registry');
 const { getProvider } = require('../core/api_client');
 const { metaprompt } = require('../core/system_prompt');
@@ -11,11 +12,14 @@ const fs = require('fs');
 const path = require('path');
 
 const HISTORY_LIMIT = 10;
-const SESSIONS_DIR = path.resolve(__dirname, '../../.sessions');
+// Use OS-appropriate app data directory
+const APP_DATA_DIR = path.join(os.homedir(), '.dalton-cli');
+const SESSIONS_DIR = path.join(APP_DATA_DIR, 'sessions');
 const LAST_SESSION_NAME = '__last_session';
 
 // --- Session Management ---
 const saveSession = (name, history) => {
+  if (!fs.existsSync(APP_DATA_DIR)) fs.mkdirSync(APP_DATA_DIR);
   if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR);
   const filePath = path.join(SESSIONS_DIR, `${name}.json`);
   fs.writeFileSync(filePath, JSON.stringify(history, null, 2));
@@ -33,11 +37,18 @@ const getConfiguredProviders = () => Object.keys(readConfig().ai_providers || {}
 
 const executeToolCall = async (toolCall) => {
   const { name, arguments: argsStr } = toolCall.function;
-  const args = JSON.parse(argsStr);
+  let args;
+  try {
+    args = JSON.parse(argsStr);
+  } catch (error) {
+    return { tool_call_id: toolCall.id, role: 'tool', name, content: `Error parsing arguments: ${error.message}` };
+  }
+
   console.log(chalk.blue(`\nShekinah wants to call tool: ${name} with args:`), args);
   let result;
   if (name === 'execute_shell_command') result = await handleShell(args.command, true);
   else if (name === 'read_file_content') result = await handleFs('read', [args.file_path], true);
+  else if (name === 'list_render_services') result = await listRenderServices();
   else result = `Unknown tool: ${name}`;
   return { tool_call_id: toolCall.id, role: 'tool', name, content: String(result) };
 };
@@ -47,11 +58,20 @@ const chatLoop = async (provider, model, initialHistory, sessionName) => {
   console.log(chalk.blue(`Starting chat with ${provider.providerName}: ${model}.`));
   console.log(chalk.yellow('Type 'exit' or 'quit' to end. Press Ctrl+C to interrupt.'));
 
-  process.on('SIGINT', () => { console.log(chalk.red('\nExiting gracefully.')); process.exit(); });
+  const saveAndExit = () => {
+    saveSession(sessionName || LAST_SESSION_NAME, sessionHistory);
+    console.log(chalk.magenta(`\nSession saved as '${sessionName || LAST_SESSION_NAME}'. Exiting.`));
+    process.exit();
+  };
+
+  process.on('SIGINT', saveAndExit);
 
   while (true) {
     const { prompt } = await inquirer.prompt([{ type: 'input', name: 'prompt', message: chalk.green('You: ') }]);
-    if (['exit', 'quit'].includes(prompt.toLowerCase())) break;
+    if (['exit', 'quit'].includes(prompt.toLowerCase())) {
+      saveAndExit();
+      break;
+    }
 
     sessionHistory.push({ role: 'user', content: prompt });
 
@@ -95,12 +115,11 @@ const chatLoop = async (provider, model, initialHistory, sessionName) => {
         sessionHistory.push({ role: 'assistant', content: finalResponseText });
       }
     } catch (error) {
-      sessionHistory.pop();
-      console.error(chalk.red('\nAn error occurred:'), error.message);
+      const errorMessage = `An error occurred: ${error.message}`;
+      console.error(chalk.red(`\n${errorMessage}`));
+      sessionHistory.push({ role: 'assistant', content: `(System: The previous attempt failed with an error: ${error.message})` });
     }
   }
-  saveSession(sessionName || LAST_SESSION_NAME, sessionHistory);
-  console.log(chalk.magenta(`Session saved as '${sessionName || LAST_SESSION_NAME}'.`));
 };
 
 const handleChat = async (options) => {
@@ -135,19 +154,31 @@ const handleChat = async (options) => {
     return;
   }
 
-  const { providerName } = await inquirer.prompt([{ 
-    type: 'list', name: 'providerName', message: 'Select an AI Provider:', choices: configuredProviders,
-  }]);
+  let providerName = options.provider;
+  if (!providerName) {
+    if (configuredProviders.length === 1) {
+      providerName = configuredProviders[0];
+    } else {
+      const answer = await inquirer.prompt([{ 
+        type: 'list', name: 'providerName', message: 'Select an AI Provider:', choices: configuredProviders,
+      }]);
+      providerName = answer.providerName;
+    }
+  }
 
-  const availableModels = getAvailableModels([providerName]);
-  const { selectedModel } = await inquirer.prompt([{ 
-    type: 'list', name: 'selectedModel', message: `Select a model from ${providerName}:`,
-    choices: availableModels.map(m => ({ name: m.name.split(': ')[1], value: m.value.model })),
-  }]);
+  let model = options.model;
+  if (!model) {
+    const availableModels = getAvailableModels([providerName]);
+    const { selectedModel } = await inquirer.prompt([{ 
+      type: 'list', name: 'selectedModel', message: `Select a model from ${providerName}:`,
+      choices: availableModels.map(m => ({ name: m.name.split(': ')[1], value: m.value.model })),
+    }]);
+    model = selectedModel;
+  }
 
   try {
     const provider = getProvider(providerName);
-    await chatLoop(provider, selectedModel, initialHistory, sessionName);
+    await chatLoop(provider, model, initialHistory, sessionName);
   } catch (error) {
     console.error(chalk.red(error.message));
   }

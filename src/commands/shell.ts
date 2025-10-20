@@ -2,6 +2,8 @@ const { exec } = require('child_process');
 const inquirer = require('inquirer');
 const chalk = require('chalk');
 
+const EXEC_TIMEOUT = 15000; // 15 seconds
+
 const confirmAndExecute = async (command, isToolCall = false) => {
   let execute = true;
   if (isToolCall) {
@@ -18,30 +20,31 @@ Allow execution?`,
   }
 
   if (!execute) {
-    console.log(chalk.red('Execution cancelled by user.'));
-    return 'Execution cancelled by user.'; // Return a message for the AI
+    const message = 'Execution cancelled by user.';
+    console.log(chalk.red(message));
+    return message;
   }
 
   return new Promise((resolve) => {
-    exec(command, (error, stdout, stderr) => {
+    exec(command, { timeout: EXEC_TIMEOUT }, (error, stdout, stderr) => {
+      const combinedOutput = `STDOUT:\n${stdout}\n\nSTDERR:\n${stderr}`;
       if (error) {
         console.error(chalk.red(`Execution Error: ${error.message}`));
-        resolve(`Execution Error: ${error.message}`); // Return error message for the AI
+        // On error, we still resolve, but pass the error message in the output
+        resolve(`EXECUTION FAILED with error: ${error.message}\n\n${combinedOutput}`);
+      } else {
+        console.log(chalk.gray(combinedOutput));
+        resolve(combinedOutput);
       }
-      if (stderr) {
-        console.log(chalk.yellow(`Stderr: ${stderr}`));
-      }
-      console.log(chalk.gray(`Stdout: ${stdout}`));
-      resolve(stdout || stderr || 'Command executed successfully.'); // Return output for the AI
     });
   });
 };
 
 const handleShell = (command, isToolCall = false) => {
   if (!command) {
-    console.error(chalk.red('Error: No command provided.'));
-    console.log('Example: dalton-cli shell "ls -l"');
-    return;
+    const message = 'Error: No command provided. Example: dalton-cli shell "ls -l"';
+    console.error(chalk.red(message));
+    return message;
   }
   return confirmAndExecute(command, isToolCall);
 };

@@ -1,4 +1,11 @@
-const modelRegistry = {
+
+import { z } from 'zod';
+import { modelRegistrySchema } from './schemas';
+
+// Infer the type from the schema
+export type ModelRegistry = z.infer<typeof modelRegistrySchema>;
+
+export const modelRegistry: ModelRegistry = {
   // Standard OpenAI
   openai: {
     name: 'OpenAI',
@@ -31,20 +38,26 @@ const modelRegistry = {
   },
 };
 
-const getAvailableModels = (configuredProviders) => {
-  const available = [];
+// Validate the modelRegistry against the schema
+modelRegistrySchema.parse(modelRegistry);
+
+interface AvailableModel {
+  name: string;
+  value: { provider: string; model: string };
+}
+
+export const getAvailableModels = (configuredProviders: string[]): AvailableModel[] => {
+  const available: AvailableModel[] = [];
   for (const provider of configuredProviders) {
     if (modelRegistry[provider]) {
       const providerInfo = modelRegistry[provider];
       providerInfo.models.forEach(model => {
-        available.push({ 
+        available.push({
           name: `${providerInfo.name}: ${model}`,
-          value: { provider, model } 
+          value: { provider, model }
         });
       });
     }
   }
   return available;
 };
-
-module.exports = { getAvailableModels };

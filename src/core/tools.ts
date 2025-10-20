@@ -1,9 +1,17 @@
-const tools = [
+
+import { z } from 'zod';
+import { toolDefinitionSchema } from './schemas';
+
+// Infer the type from the schema
+export type Tool = z.infer<typeof toolDefinitionSchema>;
+
+// Define the tools with the inferred type
+export const tools: Tool[] = [
   {
     type: 'function',
     function: {
       name: 'execute_shell_command',
-      description: 'Executes a shell command in the user\'s local environment.',
+      description: "Executes a shell command in the user's local environment.",
       parameters: {
         type: 'object',
         properties: {
@@ -46,4 +54,5 @@ const tools = [
   },
 ];
 
-module.exports = { tools };
+// Validate the tools against the schema
+toolDefinitionSchema.array().parse(tools);
