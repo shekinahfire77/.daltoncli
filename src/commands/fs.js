@@ -50,4 +50,4 @@ const handleFs = (action, args = [], isToolCall = false) => {
   }
 };
 
-module.exports = handleFs;
+module.exports = { handleFs, isPathSafe };

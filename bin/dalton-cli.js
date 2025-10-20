@@ -21,6 +21,10 @@ program
 program
   .command('chat')
   .description('Start an interactive chat session with a selected AI model')
+  .option('-f, --file <path>', 'Path to a file to add to the chat context')
+  .option('-r, --resume', 'Resume the last chat session')
+  .option('-l, --load <name>', 'Load a specific chat session')
+  .option('-s, --save <name>', 'Save the session with a specific name on exit')
   .action(handleChat);
 
 program
