@@ -1,22 +1,26 @@
 const { OpenAI } = require('openai');
-const { openaiApiKey, azureApiKey, azureApiEndpoint } = require('./config');
-const { tools } = require('./tools'); // Import the tool definitions
+const { readConfig } = require('./config');
+const { tools } = require('./tools');
 
 const getOpenAIClient = (provider) => {
+  const config = readConfig();
+  const aiProviders = config.ai_providers || {};
+  const providerConfig = aiProviders[provider];
+
+  if (!providerConfig || !providerConfig.api_key) {
+    throw new Error(`${provider} API key not configured. Please use \'dalton-cli configure ai set ${provider} api_key <key>\'.`);
+  }
+
   if (provider === 'azure') {
-    if (!azureApiKey || !azureApiEndpoint) {
-      throw new Error('Azure API key or endpoint not configured. Please use \'dalton-cli configure set azure <key> <endpoint>\'.');
+    if (!providerConfig.api_endpoint) {
+      throw new Error('Azure API endpoint not configured. Please use \'dalton-cli configure ai set azure api_endpoint <endpoint>\'.');
     }
     return new OpenAI({
-      apiKey: azureApiKey,
-      baseURL: azureApiEndpoint,
+      apiKey: providerConfig.api_key,
+      baseURL: providerConfig.api_endpoint,
     });
   } else {
-    // Default to standard OpenAI
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured. Please use \'dalton-cli configure set openai <key>\'.');
-    }
-    return new OpenAI({ apiKey: openaiApiKey });
+    return new OpenAI({ apiKey: providerConfig.api_key });
   }
 };
 

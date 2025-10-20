@@ -3,27 +3,19 @@ const chalk = require('chalk');
 const { getAvailableModels } = require('../core/model_registry');
 const { sendPromptToAI } = require('../core/api_client');
 const { metaprompt } = require('../core/system_prompt');
+const { readConfig } = require('../core/config');
 const handleShell = require('./shell');
 const handleFs = require('./fs');
+const { listServices: listRenderServices } = require('../integrations/render');
 const fs = require('fs');
 const path = require('path');
 
 const HISTORY_LIMIT = 10; // Number of turns before summarization
 
-// Function to get the list of configured providers from the .env file
+// Function to get the list of configured providers from config.json
 const getConfiguredProviders = () => {
-  const envPath = path.resolve(__dirname, '../../.env');
-  if (!fs.existsSync(envPath)) return [];
-  const fileContent = fs.readFileSync(envPath, { encoding: 'utf-8' });
-  const providers = new Set();
-  fileContent.split('\n').forEach(line => {
-    const [key] = line.split('=');
-    if (key) {
-      if (key.endsWith('_API_KEY')) providers.add(key.replace('_API_KEY', '').toLowerCase());
-      if (key.endsWith('_API_ENDPOINT')) providers.add(key.replace('_API_ENDPOINT', '').toLowerCase());
-    }
-  });
-  return [...providers];
+  const config = readConfig();
+  return Object.keys(config.ai_providers || {});
 };
 
 const summarizeHistory = async (history, options) => {
@@ -53,6 +45,8 @@ const executeToolCall = async (toolCall) => {
     result = await handleShell(args.command, true);
   } else if (functionName === 'read_file_content') {
     result = await handleFs('read', [args.file_path], true);
+  } else if (functionName === 'list_render_services') {
+    result = await listRenderServices();
   } else {
     result = `Unknown tool: ${functionName}`;
   }

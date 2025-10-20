@@ -33,6 +33,17 @@ const tools = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'list_render_services',
+      description: 'Lists all services for the user on the Render platform.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
 ];
 
 module.exports = { tools };

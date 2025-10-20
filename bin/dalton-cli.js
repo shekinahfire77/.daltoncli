@@ -24,8 +24,8 @@ program
   .action(handleChat);
 
 program
-  .command('configure [action] [provider] [key] [endpoint]')
-  .description('Configure API keys and other settings (actions: set, list)')
+  .command('configure [args...]')
+  .description('Configure AI providers and MCP integrations (e.g., 'list' or 'ai set openai api_key ...')')
   .action(handleConfigure);
 
 program
