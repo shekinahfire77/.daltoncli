@@ -1,0 +1,26 @@
+{
+  "name": "dalton-cli",
+  "version": "0.1.0",
+  "description": "A custom CLI for interacting with various AI APIs.",
+  "bin": {
+    "dalton-cli": "./bin/dalton-cli.js"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "cli",
+    "ai",
+    "openai"
+  ],
+  "author": "Dalton",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.1",
+    "dotenv": "^17.2.3",
+    "inquirer": "^12.10.0",
+    "openai": "^6.5.0"
+  }
+}
