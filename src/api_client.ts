@@ -1,12 +1,20 @@
-import { config } from './config';
+import { aiProviders } from './config';
 import { getOpenAIProvider } from './providers/openai';
 import { getMistralProvider } from './providers/mistral';
 
+/**
+ * Interface representing an AI provider
+ */
 interface AIProvider {
   name: string;
-  client: any; // Replace with actual client type
+  client: any; // TODO: Replace with actual client type from provider implementations
 }
 
+/**
+ * Retrieves an AI provider instance by name
+ * @param providerName - The name of the provider ('openai', 'mistralai')
+ * @returns The AIProvider instance or undefined if provider not found
+ */
 export function getProvider(providerName: string): AIProvider | undefined {
   switch (providerName) {
     case 'openai':
@@ -17,10 +25,4 @@ export function getProvider(providerName: string): AIProvider | undefined {
       console.warn(`Unknown provider: ${providerName}`);
       return undefined;
   }
-}
-
-// Example of how to use it
-const defaultProvider = getProvider(config.name);
-if (defaultProvider) {
-  console.log(`Using AI provider: ${defaultProvider.name}`);
 }

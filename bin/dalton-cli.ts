@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
-const { Command } = require('commander');
+import { Command } from 'commander';
+import handlePrompt from '../src/commands/prompt';
+import handleConfigure from '../src/commands/configure';
+import { handleFs } from '../src/commands/fs';
+import handleShell from '../src/commands/shell';
+import handleChat from '../src/commands/chat';
+
 const program = new Command();
-const handlePrompt = require('../src/commands/prompt');
-const handleConfigure = require('../src/commands/configure');
-const handleFs = require('../src/commands/fs');
-const handleShell = require('../src/commands/shell');
-const handleChat = require('../src/commands/chat');
 
 program
   .version('0.1.0')
@@ -25,21 +26,27 @@ program
   .option('-r, --resume', 'Resume the last chat session')
   .option('-l, --load <name>', 'Load a specific chat session')
   .option('-s, --save <name>', 'Save the session with a specific name on exit')
+  .option('--list-sessions', 'List all available saved sessions with metadata')
+  .option('--max-history <number>', 'Maximum number of messages to keep in context (default: 10, range: 1-1000)', parseInt)
   .action(handleChat);
 
 program
   .command('configure [args...]')
-  .description('Configure AI providers and MCP integrations (e.g., 'list' or 'ai set openai api_key ...')')
+  .description('Configure AI providers and MCP integrations (e.g., "list" or "ai set openai api_key ...")')
   .action(handleConfigure);
 
 program
   .command('fs <action> [args...]')
   .description('Perform filesystem operations (actions: read)')
-  .action(handleFs);
+  .action(async (action: string, args: string[]) => {
+    await handleFs(action, args);
+  });
 
 program
   .command('shell <command>')
   .description('Execute a shell command')
-  .action(handleShell);
+  .action(async (command: string) => {
+    await handleShell(command);
+  });
 
 program.parse(process.argv);

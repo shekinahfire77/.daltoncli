@@ -1,5 +1,6 @@
 import { executeCommand } from '../src/core/shell_executor';
 import { spawn } from 'child_process';
+import * as os from 'os';
 
 // Mock child_process.spawn
 jest.mock('child_process', () => ({
@@ -9,6 +10,11 @@ jest.mock('child_process', () => ({
     on: jest.fn(),
     kill: jest.fn(),
   })),
+}));
+
+// Mock os.platform()
+jest.mock('os', () => ({
+  platform: jest.fn(() => process.platform),
 }));
 
 describe('Filesystem Sandboxing and Shell Timeout Unit Tests', () => {
@@ -45,7 +51,15 @@ describe('Filesystem Sandboxing and Shell Timeout Unit Tests', () => {
 
     const result = await executeCommand(command, timeout);
 
-    expect(spawn).toHaveBeenCalledWith(command, { shell: true, timeout });
+    // Check spawn call based on platform
+    if (os.platform() === 'win32') {
+      // On Windows, PowerShell is used with specific arguments
+      expect(spawn).toHaveBeenCalledWith('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { timeout });
+    } else {
+      // On Unix-like systems, use shell with -c flag
+      expect(spawn).toHaveBeenCalledWith(expect.any(String), ['-c', command], { timeout });
+    }
+
     expect(mockChildProcess.kill).toHaveBeenCalled();
     expect(result.error).toBeInstanceOf(Error);
     expect(result.error?.message).toContain(`Command timed out after ${timeout / 1000} seconds.`);
@@ -61,9 +75,18 @@ describe('Filesystem Sandboxing and Shell Timeout Unit Tests', () => {
     (spawn as jest.Mock).mockReturnValue(mockChildProcess);
 
     const command = 'ls'; // Whitelisted command
-    const result = await executeCommand(command, 1000, true); // safeMode = true
+    const timeout = 1000;
+    const result = await executeCommand(command, timeout, true); // safeMode = true
 
-    expect(spawn).toHaveBeenCalledWith(command, { shell: true, timeout: 1000 });
+    // Check spawn call based on platform
+    if (os.platform() === 'win32') {
+      // On Windows, PowerShell is used with specific arguments
+      expect(spawn).toHaveBeenCalledWith('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { timeout });
+    } else {
+      // On Unix-like systems, use shell with -c flag
+      expect(spawn).toHaveBeenCalledWith(expect.any(String), ['-c', command], { timeout });
+    }
+
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe('stdout data');
     expect(result.stderr).toBe('stderr data');

@@ -1,13 +1,15 @@
 import { ToolDefinition } from './schemas';
 
+type CommandActionArg = string | number | boolean | Record<string, unknown>;
+
 export interface DaltonCLICommand {
   name: string;
   description: string;
-  action: (...args: any[]) => Promise<void> | void;
+  action: (...args: CommandActionArg[]) => Promise<void> | void;
   options?: Array<{
     flags: string;
     description: string;
-    defaultValue?: any;
+    defaultValue?: CommandActionArg;
   }>;
 }
 

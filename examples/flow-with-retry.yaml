@@ -1,0 +1,46 @@
+name: "Shell Command with Retry Example"
+description: "Demonstrates the retry feature for shell commands in flow execution"
+
+steps:
+  # Step 1: Run a command that might fail temporarily (with retry)
+  - type: tool_call
+    tool_name: shell_exec
+    args:
+      command: "npm test"
+    retry:
+      maxAttempts: 5
+      delayMs: 2000
+      continueOnFailure: true
+    output_to: test_result
+
+  # Step 2: Install dependencies with network retry
+  - type: tool_call
+    tool_name: shell_exec
+    args:
+      command: "npm install"
+    retry:
+      maxAttempts: 5
+      delayMs: 2000
+      continueOnFailure: false
+
+  # Step 3: Run build (no retry for this example)
+  - type: tool_call
+    tool_name: shell_exec
+    args:
+      command: "npm run build"
+    output_to: build_result
+
+  # Step 4: Approval step before deployment
+  - type: approval
+    message: "Build complete. Ready to deploy?"
+    variable_to_approve: build_result
+
+  # Step 5: Deploy with retry and fail-safe
+  - type: tool_call
+    tool_name: shell_exec
+    args:
+      command: "npm run deploy"
+    retry:
+      maxAttempts: 3
+      delayMs: 1000
+      continueOnFailure: false

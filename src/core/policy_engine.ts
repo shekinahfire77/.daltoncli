@@ -1,8 +1,7 @@
-import { ChatMessage } from './schemas';
-import { modelRegistry, ModelRegistry } from './model_registry';
-import { config } from '../config'; // Import config
+import { ChatMessage, ModelRegistry } from './schemas';
+import { aiProviders, config } from '../config';
+import { getPolicyLimits } from './app_limits';
 
-const CODE_BLOCK_THRESHOLD = 10; // N lines
 const TOOL_CALL_RATIONALE_PHRASE = 'I am requesting a tool call to';
 
 export interface ModelRoutingOptions {
@@ -14,23 +13,36 @@ export function determineModel(message: ChatMessage, modelRegistry: ModelRegistr
     return options.forceModel;
   }
 
+  const policyLimits = getPolicyLimits();
+
   // Check for code blocks to elevate model
   const codeBlockRegex = /```[\s\S]*?```/g;
   const codeBlocks = message.content?.match(codeBlockRegex) || [];
 
+  // Prefer explicit values from the lightweight runtime `config` object (this allows tests to mock config)
   for (const block of codeBlocks) {
     const lines = block.split('\n').length;
-    if (lines > CODE_BLOCK_THRESHOLD) {
-      // Elevate to a better model if available and configured
-      if (config.elevatedModel && modelRegistry[config.elevatedModel]) {
-        return config.elevatedModel;
+    if (lines > policyLimits.codeBlockThreshold) {
+      if (config && (config as any).elevatedModel && modelRegistry[(config as any).elevatedModel]) {
+        return (config as any).elevatedModel;
+      }
+      // Fallback to provider config (e.g., openai) if available
+  const defaultProviderConfig = aiProviders?.openai;
+      if (defaultProviderConfig && defaultProviderConfig.default_model && modelRegistry[defaultProviderConfig.default_model]) {
+        return defaultProviderConfig.default_model;
       }
     }
   }
 
-  // Default to a cheap fast model if configured
-  if (config.defaultChatModel && modelRegistry[config.defaultChatModel]) {
-    return config.defaultChatModel;
+  // Default to the configured default model from runtime config first
+  if (config && (config as any).defaultChatModel && modelRegistry[(config as any).defaultChatModel]) {
+    return (config as any).defaultChatModel;
+  }
+
+  // Fallback to provider config (e.g., openai) if available
+  const defaultProviderConfig = aiProviders?.openai;
+  if (defaultProviderConfig && defaultProviderConfig.default_model && modelRegistry[defaultProviderConfig.default_model]) {
+    return defaultProviderConfig.default_model;
   }
 
   // Fallback to the first available model if defaults are not found

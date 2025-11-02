@@ -1,19 +1,35 @@
-import * as fs from 'fs/promises'; // Use fs.promises for async operations
+import * as fs from 'fs/promises';
 import * as path from 'path';
-// import { createSign, createVerify } from 'crypto'; // For actual signing
-import { redactSecrets } from './secret_manager'; // Import redactSecrets
+import { redactSecrets } from './secret_manager';
 
+/**
+ * Directory where session logs are stored
+ */
 const SESSION_DIR = path.join(process.cwd(), '.daltoncli_sessions');
 
+/**
+ * Type for session event details
+ */
+type SessionEventDetails = Record<string, string | number | boolean | null | undefined | Record<string, unknown>>;
+
+/**
+ * Structure of a session log entry
+ */
 interface SessionLogEntry {
   timestamp: string;
   eventType: string;
-  details: any;
-  // signature?: string; // For actual signing
+  details: SessionEventDetails;
 }
 
+/**
+ * Path to the current session log file
+ */
 let sessionFilePath: string | null = null;
 
+/**
+ * Initializes a new session and creates a log file
+ * @param sessionName - Optional name for the session
+ */
 export async function startSession(sessionName?: string): Promise<void> {
   try {
     await fs.mkdir(SESSION_DIR, { recursive: true });
@@ -34,7 +50,12 @@ export async function startSession(sessionName?: string): Promise<void> {
   }
 }
 
-export async function logSession(eventType: string, details: any): Promise<void> {
+/**
+ * Logs a session event with details and redacts secrets
+ * @param eventType - Type of event being logged
+ * @param details - Event details to log
+ */
+export async function logSession(eventType: string, details: SessionEventDetails): Promise<void> {
   if (!sessionFilePath) {
     console.warn("Session not started. Log entry will not be recorded.");
     return;
@@ -47,12 +68,7 @@ export async function logSession(eventType: string, details: any): Promise<void>
   };
 
   let logEntryString = JSON.stringify(logEntry);
-  logEntryString = await redactSecrets(logEntryString); // Redact secrets before logging
-
-  // In a real implementation, you would sign the logEntry here.
-  // const signer = createSign('sha256');
-  // signer.update(logEntryString);
-  // logEntry.signature = signer.sign(privateKey, 'hex');
+  logEntryString = await redactSecrets(logEntryString);
 
   try {
     await fs.appendFile(sessionFilePath, logEntryString + '\n', { encoding: 'utf8' });
@@ -61,6 +77,9 @@ export async function logSession(eventType: string, details: any): Promise<void>
   }
 }
 
+/**
+ * Ends the current session and closes the log file
+ */
 export async function endSession(): Promise<void> {
   if (sessionFilePath) {
     try {

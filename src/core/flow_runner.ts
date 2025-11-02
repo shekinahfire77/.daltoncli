@@ -1,13 +1,16 @@
 import * as fs from 'fs';
-import * as yaml from 'js-yaml'; // js-yaml needs to be installed: npm install js-yaml @types/js-yaml
+import * as yaml from 'js-yaml';
 import { FlowSchema, FlowStep, ChatStep, ToolCallStep, ReadFileStep, ApprovalStep } from './flow_schemas';
 import { logSession } from './session_logger';
 import { determineModel, validateToolCall } from './policy_engine';
 import { ChatMessage } from './schemas';
-import { toolRegistry } from './tool_registry'; // Import the tool registry
+import { toolRegistry } from './tool_registry';
+import { modelRegistry } from '../model_registry';
+
+type FlowContextValue = string | number | boolean | object | null | undefined;
 
 interface FlowContext {
-  [key: string]: any;
+  [key: string]: FlowContextValue;
 }
 
 async function executeChatStep(step: ChatStep, context: FlowContext, dryRun: boolean): Promise<void> {
@@ -16,7 +19,7 @@ async function executeChatStep(step: ChatStep, context: FlowContext, dryRun: boo
 
   // Determine model based on policy
   const dummyChatMessage: ChatMessage = { role: 'user', content: step.prompt };
-  const modelToUse = determineModel(dummyChatMessage, modelRegistry);
+  const modelToUse = determineModel(dummyChatMessage, await modelRegistry);
   console.log(`Using model: ${modelToUse} for chat step.`);
 
   if (dryRun) {
@@ -38,7 +41,7 @@ async function executeChatStep(step: ChatStep, context: FlowContext, dryRun: boo
 
 async function executeToolCallStep(step: ToolCallStep, context: FlowContext, dryRun: boolean, allowNetwork: boolean): Promise<void> {
   console.log(`Executing Tool Call Step: ${step.tool_name} with args: ${JSON.stringify(step.args)}`);
-  logSession('tool_call_attempt', { tool_name: step.tool_name, args: step.args, dryRun, allowNetwork });
+  logSession('tool_call_attempt', { tool_name: step.tool_name, args: step.args, dryRun, allowNetwork, retry: step.retry });
 
   const dummyAssistantMessage: ChatMessage = {
     role: 'assistant',
@@ -70,18 +73,42 @@ async function executeToolCallStep(step: ToolCallStep, context: FlowContext, dry
 
   if (dryRun) {
     console.log(`[DRY-RUN] Would call tool: ${step.tool_name} with args: ${JSON.stringify(step.args)}`);
+    if (step.retry) {
+      console.log(`[DRY-RUN] With retry config: ${JSON.stringify(step.retry)}`);
+    }
     if (step.output_to) {
       console.log(`[DRY-RUN] Would store tool output in variable: ${step.output_to}`);
     }
     return;
   }
 
-  let toolOutput: any;
+  let toolOutput: FlowContextValue;
   try {
-    toolOutput = await tool.func(step.args);
-  } catch (error: any) {
-    console.error(`Error executing tool '${step.tool_name}': ${error.message}`);
-    toolOutput = `Error: ${error.message}`;
+    // Merge retry options into args if this is shell_exec
+    const toolArgs = step.tool_name === 'shell_exec' && step.retry
+      ? { ...step.args, retry: step.retry }
+      : step.args;
+
+    const result = await tool.func(toolArgs);
+    // Ensure the result is a valid FlowContextValue
+    if (result === null || result === undefined || typeof result === 'string' || typeof result === 'number' || typeof result === 'boolean' || typeof result === 'object') {
+      toolOutput = result;
+    } else {
+      toolOutput = String(result);
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`Error executing tool '${step.tool_name}': ${errorMessage}`);
+
+    // Check if we should continue on failure
+    if (step.retry?.continueOnFailure) {
+      console.log(`[Flow Runner] Continuing despite error (continueOnFailure=true)`);
+      toolOutput = `Error: ${errorMessage}`;
+    } else {
+      toolOutput = `Error: ${errorMessage}`;
+      // Re-throw the error if not in continueOnFailure mode
+      throw error;
+    }
   }
 
   if (step.output_to) {
@@ -120,7 +147,10 @@ async function executeReadFileStep(step: ReadFileStep, context: FlowContext, dry
     console.error(`Error reading file ${step.path}:`, error);
     throw error;
   }
-  logSession('read_file_complete', { path: step.path, content_preview: context[step.output_to]?.substring(0, 100) + '...' });
+  const contentPreview = step.output_to && context[step.output_to]
+    ? String(context[step.output_to]).substring(0, 100) + '...'
+    : '';
+  logSession('read_file_complete', { path: step.path, content_preview: contentPreview });
 }
 
 async function executeApprovalStep(step: ApprovalStep, context: FlowContext, dryRun: boolean, nonInteractive: boolean): Promise<void> {
@@ -150,32 +180,136 @@ async function executeApprovalStep(step: ApprovalStep, context: FlowContext, dry
   logSession('approval_step_complete', { message: step.message, status: 'simulated_approved' });
 }
 
-export async function runFlow(flowYamlPath: string, dryRun: boolean = false, nonInteractive: boolean = false, allowNetwork: boolean = false): Promise<void> {
-  console.log(`Running flow from: ${flowYamlPath} (Dry Run: ${dryRun}, Non-Interactive: ${nonInteractive}, Allow Network: ${allowNetwork})`);
-  const flowContent = fs.readFileSync(flowYamlPath, 'utf8');
-  const parsedFlow = yaml.load(flowContent);
+/**
+ * Custom error class for flow execution errors
+ */
+class FlowExecutionError extends Error {
+  constructor(
+    message: string,
+    public stepType?: string,
+    public stepIndex?: number
+  ) {
+    super(message);
+    this.name = 'FlowExecutionError';
+  }
+}
 
-  const flow = FlowSchema.parse(parsedFlow);
+/**
+ * Validates flow YAML path
+ * @param flowPath - Path to the flow YAML file
+ * @returns true if valid, false otherwise
+ */
+const validateFlowPath = (flowPath: string): boolean => {
+  // DEFENSIVE: Validate path type and format
+  if (typeof flowPath !== 'string' || flowPath.trim().length === 0) {
+    return false;
+  }
+
+  // DEFENSIVE: Check for null bytes and control characters
+  if (flowPath.includes('\0') || flowPath.includes('\r') || flowPath.includes('\n')) {
+    return false;
+  }
+
+  return true;
+};
+
+export async function runFlow(flowYamlPath: string, dryRun: boolean = false, nonInteractive: boolean = false, allowNetwork: boolean = false): Promise<void> {
+  // DEFENSIVE: Validate input parameters
+  if (!validateFlowPath(flowYamlPath)) {
+    throw new FlowExecutionError('Invalid flow path provided');
+  }
+
+  if (typeof dryRun !== 'boolean' || typeof nonInteractive !== 'boolean' || typeof allowNetwork !== 'boolean') {
+    throw new FlowExecutionError('Boolean parameters must be of type boolean');
+  }
+
+  console.log(`Running flow from: ${flowYamlPath} (Dry Run: ${dryRun}, Non-Interactive: ${nonInteractive}, Allow Network: ${allowNetwork})`);
+
+  // DEFENSIVE: Read flow file with error handling
+  let flowContent: string;
+  try {
+    if (!fs.existsSync(flowYamlPath)) {
+      throw new FlowExecutionError(`Flow file not found: ${flowYamlPath}`);
+    }
+    flowContent = fs.readFileSync(flowYamlPath, 'utf8');
+  } catch (error) {
+    if (error instanceof FlowExecutionError) {
+      throw error;
+    }
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    throw new FlowExecutionError(`Failed to read flow file: ${errorMsg}`);
+  }
+
+  // DEFENSIVE: Parse YAML with error handling
+  let parsedFlow: unknown;
+  try {
+    parsedFlow = yaml.load(flowContent);
+    if (!parsedFlow || typeof parsedFlow !== 'object') {
+      throw new FlowExecutionError('Flow file must contain a valid YAML object');
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    throw new FlowExecutionError(`Failed to parse YAML: ${errorMsg}`);
+  }
+
+  // DEFENSIVE: Validate flow schema
+  let flow: ReturnType<typeof FlowSchema.parse>;
+  try {
+    flow = FlowSchema.parse(parsedFlow);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    throw new FlowExecutionError(`Flow validation failed: ${errorMsg}`);
+  }
+
+  // DEFENSIVE: Validate flow has steps
+  if (!flow.steps || !Array.isArray(flow.steps) || flow.steps.length === 0) {
+    throw new FlowExecutionError('Flow must contain at least one step');
+  }
+
   const context: FlowContext = {};
 
-  for (const step of flow.steps) {
-    switch (step.type) {
-      case 'chat':
-        await executeChatStep(step, context, dryRun);
-        break;
-      case 'tool_call':
-        await executeToolCallStep(step, context, dryRun, allowNetwork);
-        break;
-      case 'read_file':
-        await executeReadFileStep(step, context, dryRun);
-        break;
-      case 'approval':
-        await executeApprovalStep(step, context, dryRun, nonInteractive);
-        break;
-      default:
-        console.warn(`Unknown step type: ${(step as FlowStep).type}`);
+  // DEFENSIVE: Execute steps with error handling and recovery
+  for (let i = 0; i < flow.steps.length; i++) {
+    const step = flow.steps[i];
+
+    try {
+      // DEFENSIVE: Validate step has type property
+      if (!step || typeof step !== 'object' || !('type' in step)) {
+        throw new FlowExecutionError(`Invalid step at index ${i}: missing type property`, undefined, i);
+      }
+
+      switch (step.type) {
+        case 'chat':
+          await executeChatStep(step, context, dryRun);
+          break;
+        case 'tool_call':
+          await executeToolCallStep(step, context, dryRun, allowNetwork);
+          break;
+        case 'read_file':
+          await executeReadFileStep(step, context, dryRun);
+          break;
+        case 'approval':
+          await executeApprovalStep(step, context, dryRun, nonInteractive);
+          break;
+        default:
+          console.warn(`Unknown step type at index ${i}: ${(step as FlowStep).type}`);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      const stepType = 'type' in step ? String(step.type) : 'unknown';
+
+      console.error(`Error executing step ${i} (${stepType}): ${errorMsg}`);
+
+      // DEFENSIVE: Allow continuing on non-critical errors in dry-run mode
+      if (dryRun) {
+        console.warn(`[DRY-RUN] Continuing despite error in step ${i}`);
+        continue;
+      }
+
+      throw new FlowExecutionError(`Step ${i} (${stepType}) failed: ${errorMsg}`, stepType, i);
     }
   }
+
   console.log("Flow execution complete.");
   console.log("Final Context:", context);
 }

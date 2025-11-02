@@ -1,0 +1,1 @@
+Show me the current directory, check if package.json exists, and tell me what the project name is from the package.json file.

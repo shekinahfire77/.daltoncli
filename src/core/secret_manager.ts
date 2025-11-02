@@ -1,30 +1,48 @@
 import * as dotenv from 'dotenv';
-import * as keytar from 'keytar'; // keytar needs to be installed: npm install keytar @types/keytar
+import * as keytar from 'keytar';
 
-dotenv.config(); // Load .env file
+dotenv.config();
 
+/**
+ * Service name identifier for OS keychain storage
+ */
 const SERVICE_NAME = 'dalton-cli';
 
-// Function to get a secret from .env or keychain
+/**
+ * Registry of secret keys to redact from logs
+ */
+const knownSecrets: string[] = [];
+
+/**
+ * Retrieves a secret from environment variables or OS keychain
+ * Checks .env first, then falls back to OS keychain
+ * @param key - The secret key identifier
+ * @returns The secret value or undefined if not found
+ */
 export async function getSecret(key: string): Promise<string | undefined> {
-  // Try .env first
   const envSecret = process.env[key];
   if (envSecret) {
     return envSecret;
   }
 
-  // Then try OS keychain
   const keychainSecret = await keytar.getPassword(SERVICE_NAME, key);
   return keychainSecret || undefined;
 }
 
-// Function to set a secret in the OS keychain
+/**
+ * Stores a secret in the OS keychain
+ * @param key - The secret key identifier
+ * @param value - The secret value to store
+ */
 export async function setSecret(key: string, value: string): Promise<void> {
   await keytar.setPassword(SERVICE_NAME, key, value);
   console.log(`Secret '${key}' set in OS keychain.`);
 }
 
-// Function to delete a secret from the OS keychain
+/**
+ * Deletes a secret from the OS keychain
+ * @param key - The secret key identifier
+ */
 export async function deleteSecret(key: string): Promise<void> {
   const success = await keytar.deletePassword(SERVICE_NAME, key);
   if (success) {
@@ -34,13 +52,16 @@ export async function deleteSecret(key: string): Promise<void> {
   }
 }
 
-// Simple redaction function for logs
-const knownSecrets: string[] = []; // This would be populated with keys of sensitive info
+/**
+ * Redacts registered secrets from log messages
+ * @param logMessage - The log message to redact
+ * @returns The log message with secrets replaced with [REDACTED]
+ */
 export async function redactSecrets(logMessage: string): Promise<string> {
   let redactedMessage = logMessage;
   for (const secretKey of knownSecrets) {
     const envSecret = process.env[secretKey];
-    let secretValue: string | undefined;
+    let secretValue: string | null | undefined;
     if (envSecret) {
       secretValue = envSecret;
     } else {
@@ -54,14 +75,19 @@ export async function redactSecrets(logMessage: string): Promise<string> {
   return redactedMessage;
 }
 
-// Function to register a secret key for redaction
+/**
+ * Registers a secret key to be redacted from logs
+ * @param key - The secret key identifier to register
+ */
 export function registerSecretForRedaction(key: string): void {
   if (!knownSecrets.includes(key)) {
     knownSecrets.push(key);
   }
 }
 
-// Function to clear registered secrets (mainly for testing)
+/**
+ * Clears all registered secrets (useful for testing)
+ */
 export function clearRegisteredSecrets(): void {
   knownSecrets.length = 0;
 }

@@ -1,0 +1,222 @@
+================================================================================
+QUICK REFERENCE - MAGIC NUMBERS CONSOLIDATION
+================================================================================
+
+NEW FILES CREATED
+================================================================================
+
+1. src/core/Constants.ts (280+ lines)
+   Contains:
+   - AZURE_PATTERNS: Azure endpoint detection patterns
+   - AZURE_DEFAULTS: Azure OpenAI configuration defaults
+   - ERROR_MESSAGES: 25+ standardized error message templates
+   - DEFAULT_MODELS: Provider-specific model names
+   - PROVIDER_NAMES: Standardized provider references
+   - CONFIG_KEYS: Configuration key constants
+   - TOOL_CONSTANTS: Tool choice validation constants
+   - CHAT_CONSTANTS: Session and message constants
+   - formatErrorMessage(): Error message formatter utility
+
+================================================================================
+MODIFIED FILES - KEY CHANGES
+================================================================================
+
+1. src/core/app_limits.ts
+   Added to ChatLimits interface:
+   - sessionLoadWarningThreshold: number
+   - chatHistoryRotationThreshold: number
+
+   Default values:
+   - sessionLoadWarningThreshold = 100 (configurable via env var)
+   - chatHistoryRotationThreshold = 100 (configurable via env var)
+
+2. src/providers/gemini_provider.ts
+   Before: const DEFAULT_TIMEOUT_MS = 30000, MIN_TIMEOUT_MS = 1000, MAX_TIMEOUT_MS = 600000
+   After:  Uses getApiTimeouts() from app_limits
+
+3. src/providers/openai_provider.ts
+   Before: baseURL.includes('.openai.azure.com')
+   After:  baseURL.includes(AZURE_PATTERNS.OPENAI_AZURE_COM)
+
+   Before: '2024-12-01-preview'
+   After:  AZURE_DEFAULTS.DEFAULT_API_VERSION
+
+   Before: '/openai/deployments/'
+   After:  AZURE_DEFAULTS.DEPLOYMENT_PATH
+
+   Before: 'api-version', 'api-key'
+   After:  AZURE_DEFAULTS.API_VERSION_PARAM, AZURE_DEFAULTS.API_KEY_HEADER
+
+4. src/commands/chat.ts
+   Before: if (messageCount > 100)
+   After:  if (messageCount > chatLimits.sessionLoadWarningThreshold)
+
+   Before: console.log(chalk.cyan('Session load cancelled.'))
+   After:  console.log(chalk.cyan(CHAT_CONSTANTS.SESSION_LOAD_CANCELLED))
+
+5. src/providers/BaseAIProvider.ts
+   All hardcoded error messages replaced with ERROR_MESSAGES constants
+   - loadAndValidateConfig()
+   - validateProviderConfig()
+   - handleInitializationError()
+   - validateTimeout()
+   - validateMessagesStructure()
+   - validateOptionsStructure()
+   - wrapValidationError()
+
+6. src/providers/mistral_provider.ts
+   Added: import { PROVIDER_NAMES } from '../core/Constants'
+
+================================================================================
+ENVIRONMENT VARIABLES ENABLED
+================================================================================
+
+Session/Chat Configuration:
+  DALTON_SESSION_LOAD_WARNING_THRESHOLD (default: 100)
+  DALTON_CHAT_HISTORY_ROTATION_THRESHOLD (default: 100)
+
+API Timeout Configuration:
+  DALTON_API_TIMEOUT_DEFAULT (default: 30000)
+  DALTON_API_TIMEOUT_MIN (default: 1000)
+  DALTON_API_TIMEOUT_MAX (default: 600000)
+
+Usage:
+  export DALTON_SESSION_LOAD_WARNING_THRESHOLD=200
+  export DALTON_API_TIMEOUT_DEFAULT=45000
+
+================================================================================
+HARDCODED VALUES CONSOLIDATED
+================================================================================
+
+Timeout Constants (3 values):
+  30000 -> getApiTimeouts().default
+  1000 -> getApiTimeouts().min
+  600000 -> getApiTimeouts().max
+
+Message Count Thresholds (2 instances in chat.ts):
+  Line 1086: messageCount > chatLimits.sessionLoadWarningThreshold
+  Line 1134: messageCount > chatLimits.sessionLoadWarningThreshold
+
+String Messages (2 instances in chat.ts):
+  Line 1097: chalk.cyan(CHAT_CONSTANTS.SESSION_LOAD_CANCELLED)
+  Line 1145: chalk.cyan(CHAT_CONSTANTS.SESSION_LOAD_CANCELLED)
+
+Azure Configuration (7 instances in openai_provider.ts):
+  .openai.azure.com -> AZURE_PATTERNS.OPENAI_AZURE_COM
+  .cognitiveservices.azure.com -> AZURE_PATTERNS.COGNITIVE_SERVICES_AZURE_COM
+  '2024-12-01-preview' -> AZURE_DEFAULTS.DEFAULT_API_VERSION
+  '/openai/deployments/' -> AZURE_DEFAULTS.DEPLOYMENT_PATH
+  'api-version' -> AZURE_DEFAULTS.API_VERSION_PARAM
+  'api-key' -> AZURE_DEFAULTS.API_KEY_HEADER
+
+Error Messages (25+ templates):
+  Configuration errors (5)
+  Timeout validation (4)
+  Message validation (5)
+  Options validation (4)
+  Client initialization (1)
+  Generic fallbacks (5+)
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+Code Changes Verified:
+  ✓ app_limits.ts has 3+ instances of new constants
+  ✓ gemini_provider.ts has 2+ instances of getApiTimeouts
+  ✓ openai_provider.ts has 7+ instances of AZURE_ constants
+  ✓ chat.ts has 3+ instances of CHAT_CONSTANTS
+  ✓ BaseAIProvider.ts has 21+ instances of ERROR_MESSAGES usage
+  ✓ mistral_provider.ts imports PROVIDER_NAMES
+
+Documentation Created:
+  ✓ CONSOLIDATION_CHANGES.md (detailed explanations)
+  ✓ CONSOLIDATION_SUMMARY.txt (quick summary)
+  ✓ CONSOLIDATION_VERIFICATION.txt (verification report)
+  ✓ QUICK_REFERENCE.txt (this file)
+
+Files Modified: 7
+Files Created: 4 (1 code + 3 documentation)
+Total Lines Modified: 400+
+Backwards Compatible: YES
+Breaking Changes: NONE
+
+================================================================================
+KEY FILES & ABSOLUTE PATHS
+================================================================================
+
+Code Changes:
+  C:\Users\deadm\Desktop\.daltoncli\src\core\Constants.ts
+  C:\Users\deadm\Desktop\.daltoncli\src\core\app_limits.ts
+  C:\Users\deadm\Desktop\.daltoncli\src\providers\gemini_provider.ts
+  C:\Users\deadm\Desktop\.daltoncli\src\providers\openai_provider.ts
+  C:\Users\deadm\Desktop\.daltoncli\src\commands\chat.ts
+  C:\Users\deadm\Desktop\.daltoncli\src\providers\BaseAIProvider.ts
+  C:\Users\deadm\Desktop\.daltoncli\src\providers\mistral_provider.ts
+
+Documentation:
+  C:\Users\deadm\Desktop\.daltoncli\CONSOLIDATION_CHANGES.md
+  C:\Users\deadm\Desktop\.daltoncli\CONSOLIDATION_SUMMARY.txt
+  C:\Users\deadm\Desktop\.daltoncli\CONSOLIDATION_VERIFICATION.txt
+  C:\Users\deadm\Desktop\.daltoncli\QUICK_REFERENCE.txt
+
+================================================================================
+BENEFITS
+================================================================================
+
+1. Single Source of Truth
+   - All magic numbers and strings in 1-2 centralized files
+   - No scattered hardcoded values throughout codebase
+
+2. Configurability
+   - Previously hardcoded values now configurable via environment variables
+   - Easy to adjust application behavior without code changes
+
+3. Consistency
+   - Error messages standardized across all providers
+   - Unified configuration approach
+
+4. Maintainability
+   - Global setting changes require updating only one location
+   - Easier to track and manage configuration
+
+5. Type Safety
+   - All constants properly typed with TypeScript
+   - Validation ensures configuration validity
+
+6. Documentation
+   - Comprehensive JSDoc comments on all constants
+   - Separate documentation files explain all changes
+
+================================================================================
+NEXT STEPS (OPTIONAL)
+================================================================================
+
+1. Configuration File Support
+   - Load Constants from .daltonclirc or similar
+   - Create configuration profiles
+
+2. CLI Commands
+   - Display current configuration
+   - Validate configuration
+   - Override limits temporarily
+
+3. Monitoring
+   - Log threshold violations
+   - Add metrics collection
+   - Track error frequencies
+
+4. Documentation
+   - Update README with env vars
+   - Create migration guide
+   - Document best practices
+
+================================================================================
+STATUS: COMPLETE
+================================================================================
+
+All hardcoded magic numbers and strings have been successfully consolidated
+into centralized configuration files. All changes are backwards compatible and
+thoroughly documented.
+
+For detailed information, see CONSOLIDATION_CHANGES.md

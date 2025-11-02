@@ -1,0 +1,155 @@
+================================================================================
+MAGIC NUMBERS & STRINGS CONSOLIDATION - SUMMARY
+================================================================================
+
+PROJECT: Dalton CLI
+DATE: 2025-10-22
+PURPOSE: Consolidate hardcoded magic numbers and strings into centralized config
+
+================================================================================
+FILES CREATED
+================================================================================
+
+1. src/core/Constants.ts (NEW - 280+ lines)
+   - AZURE_PATTERNS: Azure endpoint detection patterns
+   - AZURE_DEFAULTS: Azure OpenAI configuration defaults
+   - ERROR_MESSAGES: 25+ standardized error message templates
+   - DEFAULT_MODELS: Provider-specific model names
+   - PROVIDER_NAMES: Standardized provider references
+   - CONFIG_KEYS: Configuration key constants
+   - TOOL_CONSTANTS: Tool choice and validation constants
+   - CHAT_CONSTANTS: Session and message role constants
+   - formatErrorMessage(): Utility function for message formatting
+
+2. CONSOLIDATION_CHANGES.md (NEW - Detailed change documentation)
+   - Complete change log with before/after code snippets
+   - Explanation of each modification
+   - Environment variable configuration guide
+   - Benefits and testing recommendations
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+1. src/core/app_limits.ts
+   - Added sessionLoadWarningThreshold to ChatLimits interface
+   - Added chatHistoryRotationThreshold to ChatLimits interface
+   - Added environment variable support for both new thresholds
+   - Added validation for new threshold values
+
+2. src/providers/gemini_provider.ts
+   - Removed: DEFAULT_TIMEOUT_MS, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS constants
+   - Added: import { getApiTimeouts } from '../core/app_limits'
+   - Updated normalizeTimeout() to use centralized app_limits
+
+3. src/providers/openai_provider.ts
+   - Added: import { AZURE_PATTERNS, AZURE_DEFAULTS } from '../core/Constants'
+   - Replaced hardcoded Azure domain patterns with AZURE_PATTERNS constants
+   - Replaced hardcoded API version '2024-12-01-preview' with AZURE_DEFAULTS
+   - Replaced hardcoded deployment path with AZURE_DEFAULTS constant
+   - Replaced hardcoded header/query keys with AZURE_DEFAULTS constants
+
+4. src/commands/chat.ts
+   - Added: import { CHAT_CONSTANTS } from '../core/Constants'
+   - Replaced two hardcoded 'messageCount > 100' checks with configurable limits
+   - Replaced hardcoded 'Session load cancelled.' string with CHAT_CONSTANTS
+   - Now uses getChatLimits().sessionLoadWarningThreshold
+
+5. src/providers/BaseAIProvider.ts
+   - Added: import { ERROR_MESSAGES, formatErrorMessage, TOOL_CONSTANTS }
+   - Updated loadAndValidateConfig() to use ERROR_MESSAGES
+   - Updated validateProviderConfig() to use ERROR_MESSAGES
+   - Updated handleInitializationError() to use ERROR_MESSAGES
+   - Updated validateTimeout() to use ERROR_MESSAGES
+   - Updated validateMessagesStructure() to use ERROR_MESSAGES
+   - Updated validateOptionsStructure() to use ERROR_MESSAGES and TOOL_CONSTANTS
+   - Updated wrapValidationError() to use ERROR_MESSAGES
+
+6. src/providers/mistral_provider.ts
+   - Added: import { PROVIDER_NAMES } from '../core/Constants'
+
+================================================================================
+HARDCODED VALUES CONSOLIDATED
+================================================================================
+
+TIMEOUT CONSTANTS:
+- 30000 (default timeout) -> app_limits.api.default
+- 1000 (min timeout) -> app_limits.api.min
+- 600000 (max timeout) -> app_limits.api.max
+
+MESSAGE COUNT THRESHOLDS:
+- 100 (line 1315 in chat.ts) -> chatLimits.sessionLoadWarningThreshold
+- 100 (line 1358 in chat.ts) -> chatLimits.sessionLoadWarningThreshold
+
+AZURE CONFIGURATION:
+- '.openai.azure.com' -> AZURE_PATTERNS.OPENAI_AZURE_COM
+- '.cognitiveservices.azure.com' -> AZURE_PATTERNS.COGNITIVE_SERVICES_AZURE_COM
+- '2024-12-01-preview' -> AZURE_DEFAULTS.DEFAULT_API_VERSION
+- '/openai/deployments/' -> AZURE_DEFAULTS.DEPLOYMENT_PATH
+- 'api-version' -> AZURE_DEFAULTS.API_VERSION_PARAM
+- 'api-key' -> AZURE_DEFAULTS.API_KEY_HEADER
+
+STRING CONSTANTS (25+ error messages):
+- Configuration error messages
+- Timeout validation messages
+- Message validation messages
+- Options validation messages
+- Stream processing messages
+
+================================================================================
+ENVIRONMENT VARIABLE CONFIGURATION
+================================================================================
+
+Users can now configure these settings:
+
+CHAT/SESSION LIMITS:
+  DALTON_SESSION_LOAD_WARNING_THRESHOLD=100
+  DALTON_CHAT_HISTORY_ROTATION_THRESHOLD=100
+
+API TIMEOUTS:
+  DALTON_API_TIMEOUT_DEFAULT=30000
+  DALTON_API_TIMEOUT_MIN=1000
+  DALTON_API_TIMEOUT_MAX=600000
+
+================================================================================
+KEY IMPROVEMENTS
+================================================================================
+
+1. SINGLE SOURCE OF TRUTH
+   - All magic numbers and strings centralized in 2 files
+   - No more scattered hardcoded values across the codebase
+
+2. CONFIGURABILITY
+   - Previously hardcoded values now support environment variable overrides
+   - No code changes needed to modify application behavior
+
+3. CONSISTENCY
+   - Error messages standardized across all providers
+   - Provider names and constants unified
+
+4. MAINTAINABILITY
+   - Global changes require editing only 1-2 files
+   - Clear organization with categorized constants
+
+5. TYPE SAFETY
+   - Constants properly typed with TypeScript
+   - Validation ensures configuration validity
+
+6. DOCUMENTATION
+   - JSDoc comments on all constants
+   - Separate change log document for reference
+
+================================================================================
+TESTING CHECKLIST
+================================================================================
+
+[ ] Verify message count threshold still triggers at 100 (configurable)
+[ ] Confirm session load cancelled message displays correctly
+[ ] Test Azure endpoint detection with AZURE_PATTERNS constants
+[ ] Verify error messages format correctly with placeholder replacement
+[ ] Test timeout validation with app_limits configuration
+[ ] Confirm environment variable overrides work correctly
+[ ] Validate that tool choices only accept 'none' or 'auto'
+[ ] Check that all error messages display with proper context
+
+================================================================================

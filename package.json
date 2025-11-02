@@ -3,14 +3,18 @@
   "version": "0.1.0",
   "description": "A custom CLI for interacting with various AI APIs.",
   "bin": {
-    "dalton-cli": "./bin/dalton-cli.js"
+    "daltoncli": "./dist/src/index.js",
+    "dalton-cli": "./dist/src/index.js"
   },
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "build": "tsc",
+    "start": "npm run build && node dist/src/index.js",
+    "dev": "ts-node src/index.ts",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "prepare": "npm run build"
   },
   "keywords": [
     "cli",
@@ -22,21 +26,26 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@mistralai/mistralai": "^1.10.0",
+
     "axios": "^1.12.2",
     "chalk": "^5.6.2",
     "commander": "^14.0.1",
     "dotenv": "^17.2.3",
     "inquirer": "^12.10.0",
+    "js-yaml": "^4.1.0",
+    "keytar": "^7.9.0",
     "openai": "^6.5.0",
+    "tiktoken": "^1.0.22",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.9",
-    "@types/node": "^24.8.1",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3",
-    "jest": "^29.7.0",
     "@types/jest": "^29.5.14",
-    "ts-jest": "^29.4.5"
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24.8.1",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }

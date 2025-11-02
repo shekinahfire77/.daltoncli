@@ -1,11 +1,16 @@
-
 import { z } from 'zod';
-import { toolDefinitionSchema } from './schemas';
+import { toolDefinitionSchema, ToolDefinitionSchema } from './schemas';
 
-// Infer the type from the schema
+/**
+ * Type definition for tools validated against the schema
+ */
 export type Tool = z.infer<typeof toolDefinitionSchema>;
 
-// Define the tools with the inferred type
+/**
+ * Array of available tools for AI agents to use
+ * Includes shell execution, file reading, and Render platform integration
+ * All tools are validated against the toolDefinitionSchema
+ */
 export const tools: Tool[] = [
   {
     type: 'function',
@@ -54,5 +59,4 @@ export const tools: Tool[] = [
   },
 ];
 
-// Validate the tools against the schema
 toolDefinitionSchema.array().parse(tools);
